@@ -17,22 +17,22 @@ contract TokenMaster is ERC721 {
         string date;
         string time;
         string location;
+        string category; // New category field
     }
 
-    mapping(uint256 => Occasion) occasions;
+    mapping(uint256 => Occasion) public occasions;
     mapping(uint256 => mapping(address => bool)) public hasBought;
     mapping(uint256 => mapping(uint256 => address)) public seatTaken;
     mapping(uint256 => uint256[]) seatsTaken;
+    mapping(uint256 => address) public occasionCreators; // Track occasion creators
+    mapping(uint256 => uint256) public occasionBalances; // Track funds per occasion
 
     modifier onlyOwner() {
         require(msg.sender == owner);
         _;
     }
 
-    constructor(
-        string memory _name,
-        string memory _symbol
-    ) ERC721(_name, _symbol) {
+    constructor(string memory _name, string memory _symbol) ERC721(_name, _symbol) {
         owner = msg.sender;
     }
 
@@ -42,8 +42,9 @@ contract TokenMaster is ERC721 {
         uint256 _maxTickets,
         string memory _date,
         string memory _time,
-        string memory _location
-    ) public onlyOwner {
+        string memory _location,
+        string memory _category // New category parameter
+    ) public {
         totalOccasions++;
         occasions[totalOccasions] = Occasion(
             totalOccasions,
@@ -53,29 +54,25 @@ contract TokenMaster is ERC721 {
             _maxTickets,
             _date,
             _time,
-            _location
+            _location,
+            _category // Set the category
         );
+        occasionCreators[totalOccasions] = msg.sender; // Set the occasion creator
     }
 
     function mint(uint256 _id, uint256 _seat) public payable {
-        // Require that _id is not 0 or less than total occasions...
         require(_id != 0);
         require(_id <= totalOccasions);
-
-        // Require that ETH sent is greater than cost...
         require(msg.value >= occasions[_id].cost);
-
-        // Require that the seat is not taken, and the seat exists...
         require(seatTaken[_id][_seat] == address(0));
         require(_seat <= occasions[_id].maxTickets);
 
-        occasions[_id].tickets -= 1; // <-- Update ticket count
+        occasions[_id].tickets -= 1; // Update ticket count
+        hasBought[_id][msg.sender] = true; // Update buying status
+        seatTaken[_id][_seat] = msg.sender; // Assign seat
+        seatsTaken[_id].push(_seat); // Update seats currently taken
 
-        hasBought[_id][msg.sender] = true; // <-- Update buying status
-        seatTaken[_id][_seat] = msg.sender; // <-- Assign seat
-
-        seatsTaken[_id].push(_seat); // <-- Update seats currently taken
-
+        occasionBalances[_id] += occasions[_id].cost; // Track funds for the occasion
         totalSupply++;
 
         _safeMint(msg.sender, totalSupply);
@@ -89,8 +86,13 @@ contract TokenMaster is ERC721 {
         return seatsTaken[_id];
     }
 
-    function withdraw() public onlyOwner {
-        (bool success, ) = owner.call{value: address(this).balance}("");
-        require(success);
+    function withdrawFunds(uint256 _id) public {
+        require(msg.sender == occasionCreators[_id], "Not the occasion creator");
+        uint256 occasionBalance = occasionBalances[_id];
+        require(occasionBalance > 0, "No funds to withdraw for this occasion");
+
+        occasionBalances[_id] = 0; // Reset the balance before transferring
+        (bool success, ) = msg.sender.call{value: occasionBalance}("");
+        require(success, "Withdrawal failed");
     }
 }

@@ -6,6 +6,9 @@ import Card from "./components/Card";
 import Sort from "./components/Sort";
 import SeatChart from "./components/SeatChart";
 import TokenMaster from "./artifacts/TokenMaster.json";
+import EventCreationForm from "./components/EventCreationForm";
+
+const CONTRACT_ADDRESS = "0x58D251C73ab1B6f0B9d10433D7e47aCCC15349C6";
 
 function App() {
   const [account, setAccount] = React.useState(null);
@@ -15,67 +18,62 @@ function App() {
   const [occasions, setOccasions] = React.useState([]);
   const [occasion, setOccasion] = React.useState({});
   const [toggle, setToggle] = React.useState(false);
+  const [filteredOccasions, setFilteredOccasions] = React.useState(occasions);
 
   const loadBlockchainData = async () => {
-    const etherProvider = new ethers.BrowserProvider(window.ethereum);
-    setEtherProvider(etherProvider);
+    try {
+      const etherProvider = new ethers.BrowserProvider(window.ethereum);
+      setEtherProvider(etherProvider);
 
-    const smartContract = new ethers.Contract(
-      process.env.REACT_APP_CONTRACT_ADDRESS,
-      TokenMaster.abi,
-      etherProvider
-    );
-    setSmartContract(smartContract);
+      const smartContract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        TokenMaster.abi,
+        etherProvider
+      );
+      setSmartContract(smartContract);
 
-    // for making pupt request
-    const signer = await etherProvider.getSigner();
-    const contractWithSigner = new ethers.Contract(
-      process.env.REACT_APP_CONTRACT_ADDRESS,
-      TokenMaster.abi,
-      signer
-    );
-    setContractModifier(contractWithSigner);
+      // for making put request
+      const signer = await etherProvider.getSigner();
+      const contractWithSigner = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        TokenMaster.abi,
+        signer
+      );
+      setContractModifier(contractWithSigner);
 
-    const totalOccasions = Number(
-      await smartContract.totalOccasions()
-    ).toString();
+      const totalOccasions = Number(
+        await smartContract.totalOccasions()
+      ).toString();
 
-    let occasions = [];
-    for (let i = 1; i <= totalOccasions; i++) {
-      const occasion = await smartContract.getOccasion(i);
-      occasions.push(occasion);
-    }
-    setOccasions(occasions);
-
-    window.ethereum.on("accountsChanged", async () => {
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-      let formattedAccounts = [];
-      for (let account of accounts) {
-        formattedAccounts.push(ethers.getAddress(account));
+      let occasions = [];
+      for (let i = 1; i <= totalOccasions; i++) {
+        const occasion = await smartContract.getOccasion(i);
+        occasions.push(occasion);
       }
-      setAccount(formattedAccounts[0]);
-    });
+      setOccasions(occasions);
+
+      window.ethereum.on("accountsChanged", async () => {
+        const accounts = await window.ethereum.request({
+          method: "eth_requestAccounts",
+        });
+        let formattedAccounts = [];
+        for (let account of accounts) {
+          formattedAccounts.push(ethers.getAddress(account));
+        }
+        setAccount(formattedAccounts[0]);
+      });
+    } catch (e) {
+      console.error("Error loading blockchain data:", e);
+    }
   };
 
   React.useEffect(() => {
     loadBlockchainData();
   }, []);
 
-  // React.useEffect(() => {
-  // creating an event
-  //   if (contractModifier) {
-  //     contractModifier.list(
-  //       "Holi Party",
-  //       1,
-  //       500,
-  //       "March 14 2025",
-  //       "10:00 IST",
-  //       "Novotel Bengaluru"
-  //     );
-  //   }
-  // }, [JSON.stringify(contractModifier)]);
+  React.useEffect(() => {
+    setFilteredOccasions(occasions);
+  }, [occasions]);
 
   return (
     <div>
@@ -85,21 +83,43 @@ function App() {
           <strong>Events</strong>
         </h2>
       </header>
-      <Sort />
-      <div className="cards">
-        {occasions.map((occ, idx) => (
-          <Card
-            occasion={occ}
-            setOccasion={setOccasion}
-            id={idx + 1}
-            key={idx}
-            provider={etherProvider}
-            tokenMaster={smartContract}
-            account={account}
-            toggle={toggle}
-            setToggle={setToggle}
+      <div
+        style={{
+          display: "flex",
+          gap: "40px",
+          padding: "20px",
+          height: "100%",
+        }}
+      >
+        <div style={{ padding: "10px", flex: 1 }}>
+          <Sort
+            occasions={occasions}
+            setFilteredOccasions={setFilteredOccasions}
           />
-        ))}
+          <div className="cards">
+            {filteredOccasions.map((occ, idx) => (
+              <Card
+                occasion={occ}
+                setOccasion={setOccasion}
+                id={idx + 1}
+                key={idx}
+                provider={etherProvider}
+                tokenMaster={smartContract}
+                account={account}
+                toggle={toggle}
+                setToggle={setToggle}
+              />
+            ))}
+          </div>
+        </div>
+        <div
+          style={{ width: "2px", height: "100%", backgroundColor: "darkgray" }}
+        ></div>
+
+        <EventCreationForm
+          contractModifier={contractModifier}
+          loadBlockchainData={loadBlockchainData}
+        />
       </div>
       {toggle && (
         <SeatChart
